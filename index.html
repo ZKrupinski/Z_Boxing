@@ -466,6 +466,8 @@ function drawDebugBoxes(){
   if(f.attack&&!f.down&&f.attack.t>=f.attack.startup&&f.attack.t<f.attack.startup+f.attack.active){ctx.fillStyle='rgba(255,68,68,.17)';let h=hitbox(f,f.attack);ctx.fillRect(h.x,h.y,h.w,h.h);ctx.strokeStyle='#ff515a';ctx.strokeRect(h.x,h.y,h.w,h.h);}
   ctx.restore();
  }
+}
+function drawDebugLabel(){if(!showBoxes||scene!=='fight')return;
  ctx.save();ctx.fillStyle='rgba(2,9,24,.77)';ctx.fillRect(462,183,355,41);
  text('B  DEBUG  |  RED Hit / GREEN Hurt / BLUE Push',640,203,14,'#dff3ff');ctx.restore();
 }
@@ -538,15 +540,18 @@ function render(){
  const jitterY=shake>0?(Math.random()-.5)*shake*.5:0;
  ctx.save();ctx.translate(jitter+camKick,jitterY+RING_VERTICAL_SHIFT);
  let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
- sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();
- ctx.restore();ctx.restore();
+ sorted.forEach(drawFighter);drawDebugBoxes();drawEffects();
+ ctx.restore();
+ // Foreground ring ropes stay glued to the static arena instead of camera recoil.
+ ctx.save();ctx.translate(0,RING_VERTICAL_SHIFT);drawFront();ctx.restore();
+ ctx.restore();
 
  // Overlay is completely decoupled from the shifted world canvas.
  ctx=hudCtx;
  ctx.setTransform(1,0,0,1,0,0);
  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.filter='none';
  ctx.clearRect(0,0,W,H);
- drawHUD();drawIconButton();drawButtons();drawOverlay();
+ drawHUD();drawDebugLabel();drawIconButton();drawButtons();drawOverlay();
  ctx=worldCtx;
 }
 function animate(ts){
