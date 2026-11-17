@@ -37,7 +37,8 @@ sprites.red.src='assets/sprites/red_fighter.png';
 
 // Independent hand-drawn reaction frames. No sprite rotations used for falls.
 const REACTION_WIDTH=480,REACTION_HEIGHT=400; // Repacked rise + dizzy: 480x400 per frame, feet aligned
-const BLUE_DIZZY_SCALE=0.83; // Match the visual height of the original 300px standing boxer; art pixels unchanged.
+const BLUE_DIZZY_SCALE=0.83; // Preserve the blue groggy scale established earlier.
+const RISE_SCALE=0.83; // Both 480x400 get-up atlases render near the 300x300 standing boxer height.
 // Wider, individually drawn knockdown frames use a larger padded 4x3 atlas.
 const FALL_WIDTH=512,FALL_HEIGHT=420;
 const reactionImages={blue:{},red:{}};
@@ -372,13 +373,14 @@ function drawReactionSprite(f){
  const cellH=type==='fall'?FALL_HEIGHT:REACTION_HEIGHT;
  ctx.save();
  ctx.fillStyle='rgba(2,8,19,.36)';ctx.beginPath();ctx.ellipse(f.x,f.y+1,type==='dizzy'?85:112,8,0,0,Math.PI*2);ctx.fill();
- // Scale the blue dizzy animation alone. Keep the frame's ground contact fixed at y+24.
- const artScale=(type==='dizzy'&&f.side==='blue')?BLUE_DIZZY_SCALE:1;
+ // Both get-up poses are scaled to the original standing-boxer height.
+ // Preserve the existing blue groggy correction, without changing fall poses.
+ const artScale=type==='rise'?RISE_SCALE:(type==='dizzy'&&f.side==='blue')?BLUE_DIZZY_SCALE:1;
  ctx.translate(f.x,f.y);
  ctx.scale(f.face*artScale,artScale);
  if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
  else if(f.flash>0&&!f.ko&&!f.down){ctx.filter='brightness(0) invert(1)';}
- drawInterpolatedCell(atlas,cellW,cellH,4,reactionLengths[type],frame,-cellW/2,type==='fall'?-393:(type==='dizzy'?-cellH+24/artScale:-376)); // 24px foot anchor unchanged at every scale
+ drawInterpolatedCell(atlas,cellW,cellH,4,reactionLengths[type],frame,-cellW/2,type==='fall'?-393:-cellH+24/artScale); // Stable foot contact at y+24 for rise/dizzy
  ctx.restore();return true;
 }
 function drawFighter(f){
