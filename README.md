@@ -12,6 +12,7 @@
 - [애니메이션·아트 기준](./docs/ANIMATION_ART_GUIDE.md)
 - [변경 이력](./docs/CHANGELOG.md)
 - [개발·배포 운영](./docs/DEVELOPMENT_WORKFLOW.md)
+- [QA 테스트 기록](./docs/QA_RESULTS.md)
 
 ## 게임 조작
 | 키 | 기능 |
