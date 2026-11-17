@@ -34,12 +34,14 @@ sprites.red.src='assets/sprites/red_fighter.png';
 
 // Independent hand-drawn reaction frames. No sprite rotations used for falls.
 const REACTION_WIDTH=420,REACTION_HEIGHT=340;
+// Wider, individually drawn knockdown frames use a larger padded 4x3 atlas.
+const FALL_WIDTH=512,FALL_HEIGHT=420;
 const reactionImages={blue:{},red:{}};
 reactionImages.blue.dizzy=new Image();reactionImages.blue.dizzy.src='assets/sprites/blue_dizzy.png';
-reactionImages.blue.fall=new Image();reactionImages.blue.fall.src='assets/sprites/blue_fall.png';
+reactionImages.blue.fall=new Image();reactionImages.blue.fall.src='assets/sprites/blue_fall_extended.webp';
 reactionImages.blue.rise=new Image();reactionImages.blue.rise.src='assets/sprites/blue_rise.png';
 reactionImages.red.dizzy=new Image();reactionImages.red.dizzy.src='assets/sprites/red_dizzy.png';
-reactionImages.red.fall=new Image();reactionImages.red.fall.src='assets/sprites/red_fall.png';
+reactionImages.red.fall=new Image();reactionImages.red.fall.src='assets/sprites/red_fall_extended.webp';
 reactionImages.red.rise=new Image();reactionImages.red.rise.src='assets/sprites/red_rise.png';
 const reactionLengths={dizzy:8,fall:12,rise:11};
 
@@ -68,13 +70,13 @@ let showBoxes=false;
 
 const joy={x:147,y:606,r:66},buttons=[{id:'jab',x:963,y:624,r:49,color:'#f7da62',label:'JAB',sub:'잽'},{id:'hook',x:1064,y:561,r:50,color:'#fb8f6a',label:'HOOK',sub:'훅'},{id:'upper',x:1171,y:618,r:51,color:'#c89bff',label:'UPPER',sub:'어퍼'},{id:'guard',x:1073,y:663,r:45,color:'#71c9ff',label:'GUARD',sub:'가드'}];
 const keyDown=new Set(),pointers=new Map(),holds=new Map();let joyVector={x:0,y:0};
-let scene='title',player,enemy,clock=0,roundTime=ROUND_SECONDS*FPS,shake=0,camKick=0,freeze=0,koFx=0,gameOverDelay=0,particles=[],popups=[],flashes=[],impactGlow=0,finalText='',winner='';
+let scene='title',player,enemy,clock=0,roundTime=ROUND_SECONDS*FPS,shake=0,camKick=0,freeze=0,koFx=0,gameOverDelay=0,particles=[],popups=[],flashes=[],impactGlow=0,downSlowMs=0,finalText='',winner='';
 let muted=false,audio=null,noiseBuffer=null,frameTime=0,acc=0,renderFraction=0;
 let stars=Array.from({length:70},(_,i)=>({x:(i*113+47)%W,y:85+(i*41)%185,r:1+(i%3)}));
 let crowd=Array.from({length:72},(_,i)=>({x:i*20-5,y:306+(i*13)%31,h:18+(i*17)%30,col:i%7===0?'#62708e':i%3===0?'#303a57':'#293349'}));
 const rand=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),sign=v=>v<0?-1:v>0?1:0;
 function makeFighter(side){return {side,x:side==='blue'?395:882,y:side==='blue'?465:465,vx:0,vy:0,knockVX:0,face:side==='blue'?1:-1,hp:MAX_HP,balance:100,guard:100,attack:null,buffer:null,guarding:false,holdingGuard:false,stun:0,flash:0,walk:0,aiCD:50,aiMove:0,aiBehavior:'approach',ko:false,down:false,downTimer:0,dizzy:0,tempDowns:0,recoverLock:0,hitCount:0,comboTimer:0,heavyFlash:0};}
-function reset(){player=makeFighter('blue');enemy=makeFighter('red');clock=0;roundTime=ROUND_SECONDS*FPS;shake=0;camKick=0;freeze=0;koFx=0;gameOverDelay=0;particles=[];popups=[];flashes=[];impactGlow=0;finalText='';winner='';holds.clear();pointers.clear();joyVector={x:0,y:0};keyDown.clear();scene='fight';playSound('bell');focusGame();}
+function reset(){player=makeFighter('blue');enemy=makeFighter('red');clock=0;roundTime=ROUND_SECONDS*FPS;shake=0;camKick=0;freeze=0;koFx=0;gameOverDelay=0;particles=[];popups=[];flashes=[];impactGlow=0;downSlowMs=0;finalText='';winner='';holds.clear();pointers.clear();joyVector={x:0,y:0};keyDown.clear();scene='fight';playSound('bell');focusGame();}
 function initAudio(){try{if(!audio) {audio=new (window.AudioContext||window.webkitAudioContext)();const len=Math.floor(audio.sampleRate*.13);noiseBuffer=audio.createBuffer(1,len,audio.sampleRate);let a=noiseBuffer.getChannelData(0);for(let i=0;i<len;i++)a[i]=Math.random()*2-1;}if(audio.state==='suspended')audio.resume();}catch(e){audio=null;}}
 function playSound(type,power=1){if(muted||!audio)return;try{const t=audio.currentTime,osc=audio.createOscillator(),gain=audio.createGain();osc.connect(gain);gain.connect(audio.destination);let freq=125,dur=.095,volume=.13,shape='sine';if(type==='jab'){freq=155;dur=.068;volume=.09;shape='triangle'}if(type==='hook'){freq=95;dur=.11;volume=.16}if(type==='upper'){freq=73;dur=.17;volume=.19}if(type==='block'){freq=360;dur=.05;volume=.06;shape='square'}if(type==='bell'){freq=670;dur=.5;volume=.065;shape='sine'}if(type==='ko'){freq=51;dur=.6;volume=.23}osc.type=shape;osc.frequency.setValueAtTime(freq*(.95+Math.random()*.1),t);osc.frequency.exponentialRampToValueAtTime(Math.max(35,freq*.45),t+dur);gain.gain.setValueAtTime(Math.min(.32,volume*power),t);gain.gain.exponentialRampToValueAtTime(.001,t+dur);osc.start(t);osc.stop(t+dur+.01);if(noiseBuffer&&type!=='bell'){const n=audio.createBufferSource(),f=audio.createBiquadFilter(),g=audio.createGain();n.buffer=noiseBuffer;f.type='lowpass';f.frequency.value=type==='block'?1500:450;n.connect(f);f.connect(g);g.connect(audio.destination);g.gain.setValueAtTime(type==='block'?.05:.16*power,t);g.gain.exponentialRampToValueAtTime(.001,t+Math.min(.11,dur));n.start(t);n.stop(t+Math.min(.12,dur));}}catch(e){} }
 // Floating combat labels are intentionally disabled: effects and hit reactions are visual only.
@@ -118,13 +120,13 @@ function landHit(attacker,victim,att){
  if(damage>=14)pushPopup(victim.x+42,victim.y-260,'-'+Math.round(damage),'#ffb7a8');
  playSound(att.type,(heavy?1.1:.8)+(counter?.25:0));freeze=Math.min(8,(heavy?5:att.type==='jab'?2:4)+(counter?1:0));shake=Math.max(shake,heavy?14:att.type==='jab'?5:9);camKick=dir*(heavy?13:8);impactGlow=heavy?13:8;
  if(navigator.vibrate&&attacker.side==='blue')try{navigator.vibrate(heavy?35:15)}catch(e){}
- if(victim.hp<=0){victim.flash=0;victim.heavyFlash=0;victim.guarding=false;victim.holdingGuard=false;victim.stun=0;victim.dizzy=0;victim.ko=true;victim.down=true;victim.downTimer=9999;victim.attack=null;victim.buffer=null;scene='ko';koFx=0;freeze=8;shake=25;camKick=dir*25;gameOverDelay=0;winner=attacker.side;finalText=winner==='blue'?'YOU WIN':'YOU LOSE';playSound('ko');return true;}
+ if(victim.hp<=0){victim.flash=0;victim.heavyFlash=0;victim.guarding=false;victim.holdingGuard=false;victim.stun=0;victim.dizzy=0;victim.ko=true;victim.down=true;downSlowMs=900;victim.downTimer=9999;victim.attack=null;victim.buffer=null;scene='ko';koFx=0;freeze=8;shake=25;camKick=dir*25;gameOverDelay=0;winner=attacker.side;finalText=winner==='blue'?'YOU WIN':'YOU LOSE';playSound('ko');return true;}
  const breakPoint=victim.balance<=0;
  if(breakPoint&&!victim.down){
    victim.attack=null;victim.buffer=null;victim.guarding=false;victim.holdingGuard=false;
    const causesDown = heavy || counter || att.type==='upper' || att.type==='hook' || victim.tempDowns>0;
    if(causesDown){
-     victim.down=true;victim.downTimer=130;victim.dizzy=0;victim.tempDowns++;victim.stun=Math.max(victim.stun,28);victim.knockVX=clamp(victim.knockVX+dir*2.5,-27,27);
+     victim.down=true;victim.downTimer=130;victim.dizzy=0;downSlowMs=Math.max(downSlowMs,900);victim.tempDowns++;victim.stun=Math.max(victim.stun,28);victim.knockVX=clamp(victim.knockVX+dir*2.5,-27,27);
      pushPopup(victim.x,victim.y-315,'DOWN!','#ffdf93',true);freeze=Math.max(freeze,8);shake=Math.max(shake,18);camKick=dir*18;
    }else{
      victim.dizzy=92;victim.stun=Math.max(victim.stun,16);victim.knockVX=clamp(victim.knockVX+dir*1.2,-27,27);pushPopup(victim.x,victim.y-300,'DIZZY!','#ffe991',true);
@@ -315,13 +317,15 @@ function drawReactionSprite(f){
  else{return false;}
  const atlas=reactionImages[f.side][type];
  if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;
+ const cellW=type==='fall'?FALL_WIDTH:REACTION_WIDTH;
+ const cellH=type==='fall'?FALL_HEIGHT:REACTION_HEIGHT;
  ctx.save();
  ctx.fillStyle='rgba(2,8,19,.36)';ctx.beginPath();ctx.ellipse(f.x,f.y+1,type==='dizzy'?85:112,8,0,0,Math.PI*2);ctx.fill();
  ctx.translate(f.x,f.y);
  ctx.scale(f.face,1);
  if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
  else if(f.flash>0&&!f.ko&&!f.down){ctx.filter='brightness(0) invert(1)';}
- drawInterpolatedCell(atlas,REACTION_WIDTH,REACTION_HEIGHT,4,reactionLengths[type],frame,-REACTION_WIDTH/2,-REACTION_HEIGHT+18);
+ drawInterpolatedCell(atlas,cellW,cellH,4,reactionLengths[type],frame,-cellW/2,type==='fall'?-393:-cellH+18);
  ctx.restore();return true;
 }
 function drawFighter(f){
@@ -475,7 +479,17 @@ function render(){ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jit
  let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
  sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();ctx.restore();
  ctx.restore();drawHUD();drawIconButton();drawButtons();drawOverlay();}
-function animate(ts){if(!frameTime)frameTime=ts;let dt=clamp(ts-frameTime,0,75);frameTime=ts;acc+=dt;let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}renderFraction=clamp(acc/(1000/FPS),0,1);render();requestAnimationFrame(animate);}
+function animate(ts){
+ if(!frameTime)frameTime=ts;
+ const dt=clamp(ts-frameTime,0,75);frameTime=ts;
+ // Use real-time milliseconds for the brief knockdown cinematic so frame data remains 60 Hz.
+ // Do not dilate the initial hitstop; slow the subsequent fall and the KO descent instead.
+ const slow=downSlowMs>0&&freeze===0&&(scene==='fight'||scene==='ko');
+ acc+=dt*(slow?.48:1);
+ if(slow)downSlowMs=Math.max(0,downSlowMs-dt);
+ let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}
+ renderFraction=clamp(acc/(1000/FPS),0,1);render();requestAnimationFrame(animate);
+}
 function pointerPos(e){const r=C.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
 function mapButton(x,y){let found=null,near=Infinity;buttons.forEach(b=>{let d=Math.hypot(x-b.x,y-b.y);if(d<b.r+18&&d<near){near=d;found=b;}});return found;}
 function setJoy(x,y){let dx=x-joy.x,dy=y-joy.y,m=Math.hypot(dx,dy);if(m>joy.r){dx=dx/m*joy.r;dy=dy/m*joy.r;}joyVector={x:dx/joy.r,y:dy/joy.r};}
