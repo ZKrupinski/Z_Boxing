@@ -36,15 +36,16 @@ sprites.blue.src='assets/sprites/blue_fighter.png';
 sprites.red.src='assets/sprites/red_fighter.png';
 
 // Independent hand-drawn reaction frames. No sprite rotations used for falls.
-const REACTION_WIDTH=420,REACTION_HEIGHT=340;
+const REACTION_WIDTH=480,REACTION_HEIGHT=400; // Repacked rise + dizzy: 480x400 per frame, feet aligned
 // Wider, individually drawn knockdown frames use a larger padded 4x3 atlas.
 const FALL_WIDTH=512,FALL_HEIGHT=420;
 const reactionImages={blue:{},red:{}};
+reactionImages.blue.dizzy=new Image();reactionImages.blue.dizzy.src='assets/sprites/blue_dizzy.png?rev=20261117blue8';
 reactionImages.blue.fall=new Image();reactionImages.blue.fall.src='assets/sprites/blue_fall_extended.webp';
-reactionImages.blue.rise=new Image();reactionImages.blue.rise.src='assets/sprites/blue_rise.png';
+reactionImages.blue.rise=new Image();reactionImages.blue.rise.src='assets/sprites/blue_rise.png?rev=20261117rise11';
 reactionImages.red.fall=new Image();reactionImages.red.fall.src='assets/sprites/red_fall_extended.webp';
-reactionImages.red.rise=new Image();reactionImages.red.rise.src='assets/sprites/red_rise.png';
-const reactionLengths={fall:12,rise:11};
+reactionImages.red.rise=new Image();reactionImages.red.rise.src='assets/sprites/red_rise.png?rev=20261117rise11';
+const reactionLengths={dizzy:8,fall:12,rise:11};
 // Wait for the whole scene's bitmap assets before displaying the ring or allowing a match.
 // decode() also guarantees the image is usable by drawImage on its first visible frame.
 const gameImages=[sprites.blue,sprites.red,...Object.values(reactionImages.blue),...Object.values(reactionImages.red)];
@@ -360,7 +361,10 @@ function drawReactionSprite(f){
   if(elapsed<24){type='fall';frame=Math.min(11,elapsed/2);}
   else if(f.downTimer>48){type='fall';frame=11;}
   else{type='rise';frame=Math.min(10,(48-f.downTimer+sub)*11/48);}
- }else{return false;} // Dizzy retains the fighter's original face, skin and 300px sprite proportions.
+ }else if(f.dizzy>0&&f.side==='blue'){
+  // User-approved blue dizzy source; keep the red boxer's canonical idle-art groggy style.
+  type='dizzy';frame=Math.min(7,Math.max(0,(92-f.dizzy+sub)*8/92));
+ }else{return false;}
  const atlas=reactionImages[f.side][type];
  if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;
  const cellW=type==='fall'?FALL_WIDTH:REACTION_WIDTH;
@@ -371,7 +375,7 @@ function drawReactionSprite(f){
  ctx.scale(f.face,1);
  if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
  else if(f.flash>0&&!f.ko&&!f.down){ctx.filter='brightness(0) invert(1)';}
- drawInterpolatedCell(atlas,cellW,cellH,4,reactionLengths[type],frame,-cellW/2,type==='fall'?-393:-cellH+18);
+ drawInterpolatedCell(atlas,cellW,cellH,4,reactionLengths[type],frame,-cellW/2,type==='fall'?-393:-376); // packed frame feet align with ground
  ctx.restore();return true;
 }
 function drawFighter(f){
