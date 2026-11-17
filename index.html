@@ -44,6 +44,22 @@ reactionImages.red.dizzy=new Image();reactionImages.red.dizzy.src='assets/sprite
 reactionImages.red.fall=new Image();reactionImages.red.fall.src='assets/sprites/red_fall_extended.webp';
 reactionImages.red.rise=new Image();reactionImages.red.rise.src='assets/sprites/red_rise.png';
 const reactionLengths={dizzy:8,fall:12,rise:11};
+// Wait for the whole scene's bitmap assets before displaying the ring or allowing a match.
+// decode() also guarantees the image is usable by drawImage on its first visible frame.
+const gameImages=[sprites.blue,sprites.red,...Object.values(reactionImages.blue),...Object.values(reactionImages.red)];
+let assetsReady=false,assetsFailed=false;
+function preloadGameAssets(){
+ assetsReady=false;assetsFailed=false;
+ const ready=gameImages.map(img=>img.decode?img.decode():new Promise((resolve,reject)=>{
+  if(img.complete){img.naturalWidth?resolve():reject(new Error('sprite load failed'));return;}
+  img.addEventListener('load',resolve,{once:true});
+  img.addEventListener('error',()=>reject(new Error('sprite load failed')),{once:true});
+ }));
+ Promise.all(ready).then(()=>{assetsReady=true;}).catch(err=>{
+  console.error('Boxing asset preload failed',err);assetsFailed=true;
+ });
+}
+preloadGameAssets();
 
 const poses={idle:0,walk:1,guard:2,jab:3,hook:4,upper:5,hurt:6,ko:7,win:8};
 // Frame data is the single source of truth for animation, hitbox timing and recovery.
@@ -75,8 +91,8 @@ let muted=false,audio=null,noiseBuffer=null,frameTime=0,acc=0,renderFraction=0;
 let stars=Array.from({length:70},(_,i)=>({x:(i*113+47)%W,y:85+(i*41)%185,r:1+(i%3)}));
 let crowd=Array.from({length:72},(_,i)=>({x:i*20-5,y:306+(i*13)%31,h:18+(i*17)%30,col:i%7===0?'#62708e':i%3===0?'#303a57':'#293349'}));
 const rand=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),sign=v=>v<0?-1:v>0?1:0;
-function makeFighter(side){return {side,x:side==='blue'?395:882,y:side==='blue'?465:465,vx:0,vy:0,knockVX:0,face:side==='blue'?1:-1,hp:MAX_HP,balance:100,guard:100,attack:null,buffer:null,guarding:false,holdingGuard:false,stun:0,flash:0,walk:0,aiCD:50,aiMove:0,aiBehavior:'approach',ko:false,down:false,downTimer:0,dizzy:0,tempDowns:0,recoverLock:0,hitCount:0,comboTimer:0,heavyFlash:0};}
-function reset(){player=makeFighter('blue');enemy=makeFighter('red');clock=0;roundTime=ROUND_SECONDS*FPS;shake=0;camKick=0;freeze=0;koFx=0;gameOverDelay=0;particles=[];popups=[];flashes=[];impactGlow=0;downSlowMs=0;finalText='';winner='';holds.clear();pointers.clear();joyVector={x:0,y:0};keyDown.clear();scene='fight';playSound('bell');focusGame();}
+function makeFighter(side){return {side,x:side==='blue'?224:1056,y:side==='blue'?465:465,vx:0,vy:0,knockVX:0,face:side==='blue'?1:-1,hp:MAX_HP,balance:100,guard:100,attack:null,buffer:null,guarding:false,holdingGuard:false,stun:0,flash:0,walk:0,aiCD:50,aiMove:0,aiBehavior:'approach',ko:false,down:false,downTimer:0,dizzy:0,tempDowns:0,recoverLock:0,hitCount:0,comboTimer:0,heavyFlash:0};}
+function reset(){if(!assetsReady)return;player=makeFighter('blue');enemy=makeFighter('red');clock=0;roundTime=ROUND_SECONDS*FPS;shake=0;camKick=0;freeze=0;koFx=0;gameOverDelay=0;particles=[];popups=[];flashes=[];impactGlow=0;downSlowMs=0;finalText='';winner='';holds.clear();pointers.clear();joyVector={x:0,y:0};keyDown.clear();scene='fight';playSound('bell');focusGame();}
 function initAudio(){try{if(!audio) {audio=new (window.AudioContext||window.webkitAudioContext)();const len=Math.floor(audio.sampleRate*.13);noiseBuffer=audio.createBuffer(1,len,audio.sampleRate);let a=noiseBuffer.getChannelData(0);for(let i=0;i<len;i++)a[i]=Math.random()*2-1;}if(audio.state==='suspended')audio.resume();}catch(e){audio=null;}}
 function playSound(type,power=1){if(muted||!audio)return;try{const t=audio.currentTime,osc=audio.createOscillator(),gain=audio.createGain();osc.connect(gain);gain.connect(audio.destination);let freq=125,dur=.095,volume=.13,shape='sine';if(type==='jab'){freq=155;dur=.068;volume=.09;shape='triangle'}if(type==='hook'){freq=95;dur=.11;volume=.16}if(type==='upper'){freq=73;dur=.17;volume=.19}if(type==='block'){freq=360;dur=.05;volume=.06;shape='square'}if(type==='bell'){freq=670;dur=.5;volume=.065;shape='sine'}if(type==='ko'){freq=51;dur=.6;volume=.23}osc.type=shape;osc.frequency.setValueAtTime(freq*(.95+Math.random()*.1),t);osc.frequency.exponentialRampToValueAtTime(Math.max(35,freq*.45),t+dur);gain.gain.setValueAtTime(Math.min(.32,volume*power),t);gain.gain.exponentialRampToValueAtTime(.001,t+dur);osc.start(t);osc.stop(t+dur+.01);if(noiseBuffer&&type!=='bell'){const n=audio.createBufferSource(),f=audio.createBiquadFilter(),g=audio.createGain();n.buffer=noiseBuffer;f.type='lowpass';f.frequency.value=type==='block'?1500:450;n.connect(f);f.connect(g);g.connect(audio.destination);g.gain.setValueAtTime(type==='block'?.05:.16*power,t);g.gain.exponentialRampToValueAtTime(.001,t+Math.min(.11,dur));n.start(t);n.stop(t+Math.min(.12,dur));}}catch(e){} }
 // Floating combat labels are intentionally disabled: effects and hit reactions are visual only.
@@ -291,18 +307,14 @@ function drawArena(){
 }
 // Visual in-betweens between the original bitmap key drawings.
 // Simulation and hitbox timing remain fixed at 60fps.
+// Draw exactly one fully opaque painted key pose per sample.
+// Cross-fading transparent atlases made fighters fade/ghost on every intermediate frame.
+// Sub-frame timing and body transformations still provide continuous movement.
 function drawInterpolatedCell(atlas,cw,ch,cols,count,phase,dx,dy,row=0,loop=false){
  if(!Number.isFinite(phase))phase=0;
  const p=loop?((phase%count)+count)%count:clamp(phase,0,count-1);
- const from=Math.floor(p),to=loop?(from+1)%count:Math.min(count-1,from+1);
- const v=p-from,mix=v*v*(3-2*v);
- const draw=(id)=>ctx.drawImage(atlas,(id%cols)*cw,(row+Math.floor(id/cols))*ch,cw,ch,dx,dy,cw,ch);
- if(to===from||mix<.01){draw(from);return;}
- if(mix>.99){draw(to);return;}
- const alpha=ctx.globalAlpha;
- ctx.globalAlpha=alpha*(1-mix);draw(from);
- ctx.globalAlpha=alpha*mix;draw(to);
- ctx.globalAlpha=alpha;
+ const frame=loop?(Math.round(p)%count):clamp(Math.round(p),0,count-1);
+ ctx.drawImage(atlas,(frame%cols)*cw,(row+Math.floor(frame/cols))*ch,cw,ch,dx,dy,cw,ch);
 }
 function drawReactionSprite(f){
  let type='',frame=0;
@@ -404,12 +416,6 @@ function drawFighter(f){
   ctx.globalAlpha=baseAlpha;
  }
  ctx.restore();
- if(f.attack&&f.attack.type==='hook'&&!f.down){
-   const a=f.attack;
-   if(attackPhase==='STARTUP'||attackPhase==='ACTIVE'){
-     ctx.save();ctx.globalAlpha=attackPhase==='ACTIVE'?.15:.08;ctx.translate(f.x-f.face*(attackPhase==='ACTIVE'?16:8),f.y+bob+4);ctx.rotate((tilt-(attackPhase==='ACTIVE'?0.08:-0.05))*f.face);ctx.scale(f.face*scale*.98,scale*.99);drawInterpolatedCell(spr,FW,FH,4,4,frame,-150+footShift*.7,-286,poses[pose],animLoop);ctx.restore();
-   }
- }
  if(burst){const b=hitbox(f,f.attack);ctx.save();ctx.strokeStyle=f.side==='blue'?'rgba(117,212,255,.30)':'rgba(255,132,140,.30)';ctx.lineWidth=f.attack.heavy?7:4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(b.x+(f.face>0?b.w*.2:b.w*.8),b.y+b.h*.46);ctx.lineTo(b.x+(f.face>0?b.w*.9:b.w*.1),b.y+b.h*.48);ctx.stroke();ctx.restore();}
  if(f.heavyFlash>0&&f.attack){ctx.save();ctx.strokeStyle=f.side==='blue'?'rgba(110,211,255,.10)':'rgba(255,117,117,.10)';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(f.x,f.y-151,59,110,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
  if(f.dizzy>0&&!f.down&&!f.ko){ctx.save();ctx.globalAlpha=.72;ctx.strokeStyle='#ffe891';ctx.lineWidth=3;for(let i=0;i<3;i++){const ang=clock*.08+i*2.09;const sx=f.x+Math.cos(ang)*26, sy=f.y-280+Math.sin(ang)*9;ctx.beginPath();ctx.moveTo(sx-6,sy);ctx.lineTo(sx,sy-9);ctx.lineTo(sx+6,sy);ctx.stroke();}ctx.restore();}
@@ -459,7 +465,7 @@ function drawButtons(){if(scene!=='fight'&&scene!=='pause')return;
     text(b.label,b.x,b.y-6,b.id==='upper'?19:21,b.color);text(b.sub,b.x,b.y+19,13,'#e7edff');
   });ctx.globalAlpha=1;text('짧게: 빠른 펀치    길게: 강타    B: 판정 표시    밸런스 붕괴: 그로기/다운',776,698,13,'#c0cce0');ctx.restore();}
 function drawIconButton(){roundRect(1211,169,43,37,8,'rgba(12,19,34,.85)','#4b627c');text(muted?'♪×':'♪',1232,186,22,muted?'#ed999f':'#d4eeff');}
-function drawOverlay(){if(scene==='title'){ctx.fillStyle='rgba(6,9,20,.67)';ctx.fillRect(0,0,W,H);let glow=ctx.createRadialGradient(640,300,20,640,300,470);glow.addColorStop(0,'rgba(71,113,154,.26)');glow.addColorStop(1,'transparent');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+function drawOverlay(){if(scene==='title'){ctx.fillStyle='rgba(6,9,20,.48)';ctx.fillRect(0,0,W,H);let glow=ctx.createRadialGradient(640,300,20,640,300,470);glow.addColorStop(0,'rgba(71,113,154,.26)');glow.addColorStop(1,'transparent');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
   text('ARCADE BOXING',640,154,29,'#f8cc78');text('RING THEORY',640,243,96,'#ffffff');text('거리와 타이밍으로 승부하는 1 ROUND',640,308,22,'#b9d4ee');
   roundRect(373,354,534,153,15,'rgba(8,19,39,.92)','#5c7291');
   text('거리별 펀치 상성',640,381,23,'#ffde8b');text('잽 · 원거리 견제   /   훅 · 가드 파괴   /   어퍼 · 가드 관통',640,414,19,'#e7efff');text('큰 공격이 빗나가면 밸런스가 무너집니다.',640,447,19,'#c4cee2');text('밸런스 붕괴 시 그로기, 강타 시 다운이 발생합니다.',640,477,18,'#9cc9e5');
@@ -472,8 +478,16 @@ function drawOverlay(){if(scene==='title'){ctx.fillStyle='rgba(6,9,20,.67)';ctx.
   roundRect(445,376,390,113,14,'rgba(13,25,44,.9)','#6981a8');text(`YOU  ${Math.round(player.hp)}  :  ${Math.round(enemy.hp)}  CPU`,640,408,33,'#fff');text(`남은 시간 ${Math.max(0,Math.ceil(roundTime/60))}초`,640,461,19,'#a6bed8');
   roundRect(457,535,367,67,12,'#ffe080','#fff0bb');text('REMATCH',640,568,34,'#172339');text('ENTER 또는 화면 터치',640,643,19,'#cad8e9');}
 }
+function drawLoadingScreen(){
+ ctx.fillStyle='#070a13';ctx.fillRect(0,0,W,H);
+ text('RING THEORY',640,312,72,'#ecf3ff');
+ text(assetsFailed?'SPRITE LOAD ERROR':'LOADING FIGHTERS...',640,399,26,assetsFailed?'#ff8d90':'#a7c8e3');
+ if(assetsFailed)text('화면을 누르거나 ENTER로 다시 불러오기',640,455,18,'#d8e5ff');
+}
 function drawImpactFrame(){if(scene!=='ko')return;if(koFx<4){ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(0,0,W,H);}else if(koFx<12){ctx.fillStyle=koFx%3===0?'rgba(255,255,255,.55)':'rgba(0,0,0,.74)';ctx.fillRect(0,0,W,H);}else if(koFx<20){ctx.fillStyle='rgba(2,6,13,.67)';ctx.fillRect(0,0,W,H);} }
-function render(){ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jitterY=shake>0?(Math.random()-.5)*shake*.5:0;ctx.translate(jitter+camKick,jitterY);drawArena();drawImpactFrame();
+function render(){
+ if(!assetsReady){drawLoadingScreen();return;}
+ ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jitterY=shake>0?(Math.random()-.5)*shake*.5:0;ctx.translate(jitter+camKick,jitterY);drawArena();drawImpactFrame();
  // Keep fighters, ropes, debug boxes, and hit effects aligned to the lowered stage.
  ctx.save();ctx.translate(0,RING_VERTICAL_SHIFT);
  let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
@@ -495,7 +509,7 @@ function mapButton(x,y){let found=null,near=Infinity;buttons.forEach(b=>{let d=M
 function setJoy(x,y){let dx=x-joy.x,dy=y-joy.y,m=Math.hypot(dx,dy);if(m>joy.r){dx=dx/m*joy.r;dy=dy/m*joy.r;}joyVector={x:dx/joy.r,y:dy/joy.r};}
 function beginHold(id,type){holds.set(id,{type,start:clock,strong:false});if(type==='guard'){player.holdingGuard=true;}else{player.holdingGuard=false;pressAttack(player,type,false);}}
 function releaseHold(id){let h=holds.get(id);if(!h)return;holds.delete(id);if(h.type==='guard'){player.holdingGuard=[...holds.values()].some(x=>x.type==='guard')||keyDown.has(' ');}}
-C.addEventListener('pointerdown',e=>{e.preventDefault();focusGame();C.setPointerCapture?.(e.pointerId);initAudio();const {x,y}=pointerPos(e);if(scene==='title'||scene==='end'){reset();return;}if(scene==='pause'){scene='fight';return;}
+C.addEventListener('pointerdown',e=>{e.preventDefault();focusGame();if(!assetsReady){if(assetsFailed)window.location.reload();return;}C.setPointerCapture?.(e.pointerId);initAudio();const {x,y}=pointerPos(e);if(scene==='title'||scene==='end'){reset();return;}if(scene==='pause'){scene='fight';return;}
  if(x>1200&&y>150&&y<215){muted=!muted;return;}
  if(scene!=='fight')return;
  const b=mapButton(x,y);if(b){pointers.set(e.pointerId,{kind:'button',id:`touch-${e.pointerId}`});beginHold(`touch-${e.pointerId}`,b.id);}else if(x<350&&y>480){pointers.set(e.pointerId,{kind:'joy'});setJoy(x,y);}
@@ -508,7 +522,7 @@ const codeToKey={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyJ:'j',KeyK:'k',KeyL:'l',
 const controlKeys=new Set(['a','s','d','w','arrowup','arrowleft','arrowright','arrowdown',' ','j','k','l','enter','p','r','m','b','1','2']);
 function controlKey(e){return codeToKey[e.code]??String(e.key||'').toLowerCase();}
 function keyPressed(e){const key=controlKey(e);if(!controlKeys.has(key)||e.ctrlKey||e.altKey||e.metaKey)return;
- e.preventDefault();e.stopPropagation();if(e.repeat)return;initAudio();
+ e.preventDefault();e.stopPropagation();if(e.repeat)return;if(!assetsReady){if(assetsFailed&&key==='enter')window.location.reload();return;}initAudio();
  if(key==='enter'&&(scene==='title'||scene==='end')){reset();return;}
  if(key==='r'&&scene!=='title'){reset();return;}
  if(key==='m'){muted=!muted;return;}if(key==='b'){showBoxes=!showBoxes;return;}if((key==='1'||key==='2')&&scene==='fight'){window.__boxingTest.forceReaction('red',key==='1'?'dizzy':'down');return;}
@@ -521,7 +535,7 @@ shell.addEventListener('focus',updateFocusHint);shell.addEventListener('blur',up
 window.addEventListener('focus',()=>requestAnimationFrame(updateFocusHint));
 window.addEventListener('blur',()=>{keyDown.clear();holds.clear();pointers.clear();joyVector={x:0,y:0};if(player)player.holdingGuard=false;if(scene==='fight')scene='pause';requestAnimationFrame(updateFocusHint);});
 window.addEventListener('visibilitychange',()=>{if(document.hidden&&scene==='fight')scene='pause';});
-window.__boxingTest={reset:()=>reset(),state:()=>({scene,player:{x:player.x,y:player.y,hp:player.hp,balance:player.balance,attack:player.attack&&{type:player.attack.type,t:player.attack.t,startup:player.attack.startup,active:player.attack.active,connected:player.attack.connected}},enemy:{x:enemy.x,y:enemy.y,hp:enemy.hp,balance:enemy.balance,down:enemy.down,downTimer:enemy.downTimer,dizzy:enemy.dizzy},showBoxes}),forceReaction:(who,type)=>{const f=who==='red'?enemy:player;f.attack=null;f.buffer=null;f.stun=0;f.ko=false;f.dizzy=0;f.down=false; if(type==='dizzy'){f.dizzy=92;f.balance=0;}else if(type==='down'){f.down=true;f.downTimer=130;f.balance=0;}else if(type==='ko'){f.ko=true;f.down=true;f.downTimer=9999;scene='ko';koFx=0;winner=f.side==='red'?'blue':'red';finalText=winner==='blue'?'YOU WIN':'YOU LOSE';}},setReactionTimer:(who,t)=>{const f=who==='red'?enemy:player;if(f.down)f.downTimer=Math.max(1,Math.floor(t));},setPositions:(x1,x2)=>{player.x=x1;enemy.x=x2;player.y=enemy.y=465;},toggleBoxes:()=>showBoxes=!showBoxes};player=makeFighter('blue');enemy=makeFighter('red');updateFocusHint();requestAnimationFrame(animate);
+window.__boxingTest={reset:()=>reset(),state:()=>({assetsReady,assetsFailed,scene,player:{x:player.x,y:player.y,hp:player.hp,balance:player.balance,attack:player.attack&&{type:player.attack.type,t:player.attack.t,startup:player.attack.startup,active:player.attack.active,connected:player.attack.connected}},enemy:{x:enemy.x,y:enemy.y,hp:enemy.hp,balance:enemy.balance,down:enemy.down,downTimer:enemy.downTimer,dizzy:enemy.dizzy},showBoxes}),forceReaction:(who,type)=>{const f=who==='red'?enemy:player;f.attack=null;f.buffer=null;f.stun=0;f.ko=false;f.dizzy=0;f.down=false; if(type==='dizzy'){f.dizzy=92;f.balance=0;}else if(type==='down'){f.down=true;f.downTimer=130;f.balance=0;}else if(type==='ko'){f.ko=true;f.down=true;f.downTimer=9999;scene='ko';koFx=0;winner=f.side==='red'?'blue':'red';finalText=winner==='blue'?'YOU WIN':'YOU LOSE';}},setReactionTimer:(who,t)=>{const f=who==='red'?enemy:player;if(f.down)f.downTimer=Math.max(1,Math.floor(t));},setPositions:(x1,x2)=>{player.x=x1;enemy.x=x2;player.y=enemy.y=465;},toggleBoxes:()=>showBoxes=!showBoxes};player=makeFighter('blue');enemy=makeFighter('red');updateFocusHint();requestAnimationFrame(animate);
 })();
 </script>
 </body>
