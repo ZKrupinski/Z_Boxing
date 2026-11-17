@@ -6,17 +6,19 @@
 <meta name="theme-color" content="#101321"/>
 <title>RING THEORY — Enhanced Animation</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070a13;overscroll-behavior:none;font-family:system-ui,"Malgun Gothic",sans-serif}body{display:flex;align-items:center;justify-content:center}#shell{position:relative;width:min(100vw,177.7777778vh);height:min(100vh,56.25vw);overflow:hidden;background:#12192c;box-shadow:0 0 0 1px #293953,0 0 85px #000;touch-action:none}canvas{display:block;width:100%;height:100%;image-rendering:auto;touch-action:none;user-select:none;-webkit-user-select:none}#orientation{display:none;position:fixed;inset:0;z-index:5;background:#101626;color:#e1e8ff;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-weight:700;text-align:center;padding:32px}#orientation b{font-size:40px;color:#fbe36c}#orientation span{font-size:14px;line-height:1.8;color:#aebcda}@media (pointer:coarse) and (orientation:portrait){#orientation{display:flex}}#helper{position:fixed;right:10px;bottom:6px;color:#63718f;font:10px monospace;pointer-events:none;opacity:.7;z-index:1}#shell:focus{outline:2px solid rgba(255,224,128,.75);outline-offset:-2px}#focusHint{position:absolute;top:15%;left:50%;transform:translateX(-50%);z-index:3;pointer-events:none;display:block;white-space:nowrap;font-size:clamp(11px,1.5vw,20px);font-weight:800;background:rgba(9,16,32,.94);border:1px solid #ffe080;color:#fff0b0;border-radius:10px;padding:10px 17px;box-shadow:0 6px 20px rgba(0,0,0,.5)}#focusHint[hidden]{display:none}
+:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070a13;overscroll-behavior:none;font-family:system-ui,"Malgun Gothic",sans-serif}body{display:flex;align-items:center;justify-content:center}#shell{position:relative;width:min(100vw,177.7777778vh);height:min(100vh,56.25vw);overflow:hidden;background:#12192c;box-shadow:0 0 0 1px #293953,0 0 85px #000;touch-action:none}canvas{display:block;width:100%;height:100%;image-rendering:auto;touch-action:none;user-select:none;-webkit-user-select:none}#hud{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}#orientation{display:none;position:fixed;inset:0;z-index:5;background:#101626;color:#e1e8ff;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-weight:700;text-align:center;padding:32px}#orientation b{font-size:40px;color:#fbe36c}#orientation span{font-size:14px;line-height:1.8;color:#aebcda}@media (pointer:coarse) and (orientation:portrait){#orientation{display:flex}}#helper{position:fixed;right:10px;bottom:6px;color:#63718f;font:10px monospace;pointer-events:none;opacity:.7;z-index:1}#shell:focus{outline:2px solid rgba(255,224,128,.75);outline-offset:-2px}#focusHint{position:absolute;top:15%;left:50%;transform:translateX(-50%);z-index:3;pointer-events:none;display:block;white-space:nowrap;font-size:clamp(11px,1.5vw,20px);font-weight:800;background:rgba(9,16,32,.94);border:1px solid #ffe080;color:#fff0b0;border-radius:10px;padding:10px 17px;box-shadow:0 6px 20px rgba(0,0,0,.5)}#focusHint[hidden]{display:none}
 </style>
 </head>
 <body>
-<div id="shell" tabindex="0" role="application" aria-label="복싱 게임. 게임 화면 클릭 후 엔터 시작, WASD 이동, J 잽, K 훅, L 어퍼컷, 스페이스 가드"><canvas id="game" width="1280" height="720" tabindex="-1"></canvas><div id="focusHint">⌨ 게임 화면을 클릭하면 키보드 조작이 활성화됩니다</div></div>
+<div id="shell" tabindex="0" role="application" aria-label="복싱 게임. 게임 화면 클릭 후 엔터 시작, WASD 이동, J 잽, K 훅, L 어퍼컷, 스페이스 가드"><canvas id="game" width="1280" height="720" tabindex="-1"></canvas><canvas id="hud" width="1280" height="720" aria-hidden="true"></canvas><div id="focusHint">⌨ 게임 화면을 클릭하면 키보드 조작이 활성화됩니다</div></div>
 <div id="orientation"><b>↻</b>가로 화면으로 플레이하세요<span>복싱 프로토타입은 16:9 가로 화면에 맞춰져 있습니다.</span></div>
 <div id="helper">RING THEORY • SMOOTH ANIMATION / DRAWN KO</div>
 <script>
 (()=>{
 'use strict';
-const C=document.getElementById('game'),shell=document.getElementById('shell'),focusHint=document.getElementById('focusHint'),ctx=C.getContext('2d',{alpha:false});ctx.imageSmoothingEnabled=true;
+const C=document.getElementById('game'),HUD=document.getElementById('hud'),shell=document.getElementById('shell'),focusHint=document.getElementById('focusHint');
+const worldCtx=C.getContext('2d',{alpha:false}),hudCtx=HUD.getContext('2d',{alpha:true});
+let ctx=worldCtx;worldCtx.imageSmoothingEnabled=true;hudCtx.imageSmoothingEnabled=true;
 function gameHasFocus(){return document.hasFocus()&&(document.activeElement===shell||document.activeElement===C);}
 function updateFocusHint(){focusHint.hidden=gameHasFocus();}
 function focusGame(){try{shell.focus({preventScroll:true});}catch(_){shell.focus();}updateFocusHint();}
@@ -379,7 +381,7 @@ function drawFighter(f){
  const sub=freeze>0||scene==='ko'?0:renderFraction;
  if(f.ko){pose='ko';frame=clamp((koFx+sub)/8,0,3);}
  else if(f.down){pose='ko';frame=f.downTimer>58?1:f.downTimer>24?2:3;}
- else if(f.dizzy>0){pose='hurt';frame=(clock+sub)/8;animLoop=true;}
+ else if(f.dizzy>0){pose='idle';frame=0;animLoop=false;} // identical canonical idle pixels: no alternate face, skin tone or body size
  else if(f.stun>0){pose='hurt';frame=clamp((f.stun-sub)/5,0,3);}
  else if(f.attack){const a=f.attack,t=a.t+sub;pose=a.type;
   if(t<a.startup){
@@ -426,8 +428,8 @@ function drawFighter(f){
    if(attackPhase==='RECOVERY'){bodyLean*=.35;tx*=.35;ty*=.35;footShift*=.35;backPull*=.35;}
  }
  if(f.down){tilt=-1.42+(f.downTimer<24?.25:0); tx += -f.face*22; ty += 24; scale=1.03;}
- if(f.dizzy>0){ // Groggy motion is applied to the SAME base sprite as idle/attack.
-  bodyLean+=Math.sin(clock*.26+(f.side==='red'?1.7:0))*.085;
+ if(f.dizzy>0){ // Preserve idle art, with only positional sway; never alter the texture/scale.
+  bodyLean+=Math.sin(clock*.26+(f.side==='red'?1.7:0))*.060;
   tx+=Math.sin(clock*.22)*6;ty+=Math.sin(clock*.12)*2;
  }
  if(f.stun>0&&!f.attack){tx -= f.face*4;bodyLean-=Math.min(.12,Math.abs(f.knockVX)*.006);}
@@ -521,13 +523,32 @@ function drawLoadingScreen(){
 }
 function drawImpactFrame(){if(scene!=='ko')return;if(koFx<4){ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(0,0,W,H);}else if(koFx<12){ctx.fillStyle=koFx%3===0?'rgba(255,255,255,.55)':'rgba(0,0,0,.74)';ctx.fillRect(0,0,W,H);}else if(koFx<20){ctx.fillStyle='rgba(2,6,13,.67)';ctx.fillRect(0,0,W,H);} }
 function render(){
- if(!assetsReady){drawLoadingScreen();return;}
- ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jitterY=shake>0?(Math.random()-.5)*shake*.5:0;ctx.translate(jitter+camKick,jitterY);drawArena();drawImpactFrame();
- // Keep fighters, ropes, debug boxes, and hit effects aligned to the lowered stage.
- ctx.save();ctx.translate(0,RING_VERTICAL_SHIFT);
+ // HUD is painted on an independent transparent canvas, never inside camera or knockback transforms.
+ // Even knockdown slomo, camera shake and scene shifts cannot translate its own canvas context.
+ if(!assetsReady){
+  ctx=worldCtx;drawLoadingScreen();
+  hudCtx.setTransform(1,0,0,1,0,0);hudCtx.clearRect(0,0,W,H);
+  return;
+ }
+ ctx=worldCtx;
+ ctx.save();
+ ctx.setTransform(1,0,0,1,0,0);
+ drawArena();drawImpactFrame(); // Keep the environment stable during a knockdown.
+ const jitter=shake>0?(Math.random()-.5)*shake:0;
+ const jitterY=shake>0?(Math.random()-.5)*shake*.5:0;
+ ctx.save();ctx.translate(jitter+camKick,jitterY+RING_VERTICAL_SHIFT);
  let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
- sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();ctx.restore();
- ctx.restore();drawHUD();drawIconButton();drawButtons();drawOverlay();}
+ sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();
+ ctx.restore();ctx.restore();
+
+ // Overlay is completely decoupled from the shifted world canvas.
+ ctx=hudCtx;
+ ctx.setTransform(1,0,0,1,0,0);
+ ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.filter='none';
+ ctx.clearRect(0,0,W,H);
+ drawHUD();drawIconButton();drawButtons();drawOverlay();
+ ctx=worldCtx;
+}
 function animate(ts){
  if(!frameTime)frameTime=ts;
  const dt=clamp(ts-frameTime,0,75);frameTime=ts;
