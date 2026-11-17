@@ -484,7 +484,7 @@ function animate(ts){
  const dt=clamp(ts-frameTime,0,75);frameTime=ts;
  // Use real-time milliseconds for the brief knockdown cinematic so frame data remains 60 Hz.
  // Do not dilate the initial hitstop; slow the subsequent fall and the KO descent instead.
- const slow=downSlowMs>0&&freeze===0&&(scene==='fight'||scene==='ko');
+ const slow=downSlowMs>0&&(scene==='ko'||(scene==='fight'&&freeze===0));
  acc+=dt*(slow?.48:1);
  if(slow)downSlowMs=Math.max(0,downSlowMs-dt);
  let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}
