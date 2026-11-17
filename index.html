@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <meta name="theme-color" content="#101321"/>
-<title>RING THEORY V5.1 — Knockback & KO Flash Fix</title>
+<title>RING THEORY — Enhanced Animation</title>
 <style>
 :root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070a13;overscroll-behavior:none;font-family:system-ui,"Malgun Gothic",sans-serif}body{display:flex;align-items:center;justify-content:center}#shell{position:relative;width:min(100vw,177.7777778vh);height:min(100vh,56.25vw);overflow:hidden;background:#12192c;box-shadow:0 0 0 1px #293953,0 0 85px #000;touch-action:none}canvas{display:block;width:100%;height:100%;image-rendering:auto;touch-action:none;user-select:none;-webkit-user-select:none}#orientation{display:none;position:fixed;inset:0;z-index:5;background:#101626;color:#e1e8ff;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-weight:700;text-align:center;padding:32px}#orientation b{font-size:40px;color:#fbe36c}#orientation span{font-size:14px;line-height:1.8;color:#aebcda}@media (pointer:coarse) and (orientation:portrait){#orientation{display:flex}}#helper{position:fixed;right:10px;bottom:6px;color:#63718f;font:10px monospace;pointer-events:none;opacity:.7;z-index:1}#shell:focus{outline:2px solid rgba(255,224,128,.75);outline-offset:-2px}#focusHint{position:absolute;top:15%;left:50%;transform:translateX(-50%);z-index:3;pointer-events:none;display:block;white-space:nowrap;font-size:clamp(11px,1.5vw,20px);font-weight:800;background:rgba(9,16,32,.94);border:1px solid #ffe080;color:#fff0b0;border-radius:10px;padding:10px 17px;box-shadow:0 6px 20px rgba(0,0,0,.5)}#focusHint[hidden]{display:none}
 </style>
@@ -12,7 +12,7 @@
 <body>
 <div id="shell" tabindex="0" role="application" aria-label="복싱 게임. 게임 화면 클릭 후 엔터 시작, WASD 이동, J 잽, K 훅, L 어퍼컷, 스페이스 가드"><canvas id="game" width="1280" height="720" tabindex="-1"></canvas><div id="focusHint">⌨ 게임 화면을 클릭하면 키보드 조작이 활성화됩니다</div></div>
 <div id="orientation"><b>↻</b>가로 화면으로 플레이하세요<span>복싱 프로토타입은 16:9 가로 화면에 맞춰져 있습니다.</span></div>
-<div id="helper">RING THEORY V5 • DRAWN STAGGER / DOWN / GET-UP</div>
+<div id="helper">RING THEORY • SMOOTH ANIMATION / DRAWN KO</div>
 <script>
 (()=>{
 'use strict';
@@ -63,7 +63,7 @@ let showBoxes=false;
 const joy={x:147,y:606,r:66},buttons=[{id:'jab',x:963,y:624,r:49,color:'#f7da62',label:'JAB',sub:'잽'},{id:'hook',x:1064,y:561,r:50,color:'#fb8f6a',label:'HOOK',sub:'훅'},{id:'upper',x:1171,y:618,r:51,color:'#c89bff',label:'UPPER',sub:'어퍼'},{id:'guard',x:1073,y:663,r:45,color:'#71c9ff',label:'GUARD',sub:'가드'}];
 const keyDown=new Set(),pointers=new Map(),holds=new Map();let joyVector={x:0,y:0};
 let scene='title',player,enemy,clock=0,roundTime=90*60,shake=0,camKick=0,freeze=0,koFx=0,gameOverDelay=0,particles=[],popups=[],flashes=[],impactGlow=0,finalText='',winner='';
-let muted=false,audio=null,noiseBuffer=null,frameTime=0,acc=0;
+let muted=false,audio=null,noiseBuffer=null,frameTime=0,acc=0,renderFraction=0;
 let stars=Array.from({length:70},(_,i)=>({x:(i*113+47)%W,y:85+(i*41)%185,r:1+(i%3)}));
 let crowd=Array.from({length:72},(_,i)=>({x:i*20-5,y:306+(i*13)%31,h:18+(i*17)%30,col:i%7===0?'#62708e':i%3===0?'#303a57':'#293349'}));
 const rand=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),sign=v=>v<0?-1:v>0?1:0;
@@ -244,49 +244,63 @@ function drawArena(){
  }
  ctx.drawImage(arenaBuffer,0,0);
 }
+// Visual in-betweens between the original bitmap key drawings.
+// Simulation and hitbox timing remain fixed at 60fps.
+function drawInterpolatedCell(atlas,cw,ch,cols,count,phase,dx,dy,row=0,loop=false){
+ if(!Number.isFinite(phase))phase=0;
+ const p=loop?((phase%count)+count)%count:clamp(phase,0,count-1);
+ const from=Math.floor(p),to=loop?(from+1)%count:Math.min(count-1,from+1);
+ const v=p-from,mix=v*v*(3-2*v);
+ const draw=(id)=>ctx.drawImage(atlas,(id%cols)*cw,(row+Math.floor(id/cols))*ch,cw,ch,dx,dy,cw,ch);
+ if(to===from||mix<.01){draw(from);return;}
+ if(mix>.99){draw(to);return;}
+ const alpha=ctx.globalAlpha;
+ ctx.globalAlpha=alpha*(1-mix);draw(from);
+ ctx.globalAlpha=alpha*mix;draw(to);
+ ctx.globalAlpha=alpha;
+}
 function drawReactionSprite(f){
-  let type='',frame=0;
-  if(f.ko){
-    type='fall';frame=Math.min(11,Math.floor(koFx/3));
-  }else if(f.down){
-    const elapsed=Math.max(0,130-f.downTimer);
-    if(elapsed<24){type='fall';frame=Math.min(11,Math.floor(elapsed/2));}
-    else if(f.downTimer>48){type='fall';frame=11;}
-    else{type='rise';frame=Math.min(10,Math.floor((48-f.downTimer)*11/48));}
-  }else if(f.dizzy>0){
-    type='dizzy';frame=Math.min(7,Math.floor((92-f.dizzy)*8/92));
-  }else{return false;}
-  const atlas=reactionImages[f.side][type];
-  if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;
-  frame=Math.max(0,Math.min(reactionLengths[type]-1,frame));
-  ctx.save();
-  ctx.fillStyle='rgba(2,8,19,.36)';ctx.beginPath();ctx.ellipse(f.x,f.y+1,type==='dizzy'?85:112,8,0,0,Math.PI*2);ctx.fill();
-  ctx.translate(f.x,f.y);
-  // Facing direction can mirror the DRAWN frame; there is never a body rotation.
-  ctx.scale(f.face,1);
-  if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
-  else if(f.flash>0&&!f.ko&&!f.down){ctx.filter='brightness(0) invert(1)';}
-  const sourceX=(frame%4)*REACTION_WIDTH, sourceY=Math.floor(frame/4)*REACTION_HEIGHT;
-  ctx.drawImage(atlas,sourceX,sourceY,REACTION_WIDTH,REACTION_HEIGHT,
-    -REACTION_WIDTH/2,-REACTION_HEIGHT+18,REACTION_WIDTH,REACTION_HEIGHT);
-  ctx.restore();
-  return true;
+ let type='',frame=0;
+ const sub=scene==='ko'||freeze>0?0:renderFraction;
+ if(f.ko){type='fall';frame=Math.min(11,(koFx+sub)/3);}
+ else if(f.down){
+  const elapsed=Math.max(0,130-f.downTimer)+sub;
+  if(elapsed<24){type='fall';frame=Math.min(11,elapsed/2);}
+  else if(f.downTimer>48){type='fall';frame=11;}
+  else{type='rise';frame=Math.min(10,(48-f.downTimer+sub)*11/48);}
+ }else if(f.dizzy>0){type='dizzy';frame=Math.min(7,(92-f.dizzy+sub)*8/92);}
+ else{return false;}
+ const atlas=reactionImages[f.side][type];
+ if(!atlas||!atlas.complete||!atlas.naturalWidth)return false;
+ ctx.save();
+ ctx.fillStyle='rgba(2,8,19,.36)';ctx.beginPath();ctx.ellipse(f.x,f.y+1,type==='dizzy'?85:112,8,0,0,Math.PI*2);ctx.fill();
+ ctx.translate(f.x,f.y);
+ ctx.scale(f.face,1);
+ if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
+ else if(f.flash>0&&!f.ko&&!f.down){ctx.filter='brightness(0) invert(1)';}
+ drawInterpolatedCell(atlas,REACTION_WIDTH,REACTION_HEIGHT,4,reactionLengths[type],frame,-REACTION_WIDTH/2,-REACTION_HEIGHT+18);
+ ctx.restore();return true;
 }
 function drawFighter(f){
  if(drawReactionSprite(f))return;
  let spr=sprites[f.side];if(!spr.complete||!spr.naturalWidth)return;
- let pose='idle',frame=0,attackPhase='';
- if(f.ko){pose='ko';frame=clamp(Math.floor(koFx/8),0,3);}
+ let pose='idle',frame=0,attackPhase='',animLoop=false;
+ const sub=freeze>0||scene==='ko'?0:renderFraction;
+ if(f.ko){pose='ko';frame=clamp((koFx+sub)/8,0,3);}
  else if(f.down){pose='ko';frame=f.downTimer>58?1:f.downTimer>24?2:3;}
- else if(f.dizzy>0){pose='hurt';frame=Math.floor(clock/8)%4;}
- else if(f.stun>0){pose='hurt';frame=clamp(Math.floor(f.stun/5),0,3);}
- else if(f.attack){let a=f.attack;pose=a.type;
-  if(a.t<a.startup){frame=a.t<a.startup*.55?0:1;attackPhase='STARTUP';}
-  else if(a.t<a.startup+a.active){frame=2;attackPhase='ACTIVE';}
-  else{frame=3;attackPhase='RECOVERY';}}
- else if(f.guarding){pose='guard';frame=Math.floor(clock/18)%4;}
- else if(Math.abs(f.vx)+Math.abs(f.vy)>1.1){pose='walk';frame=Math.floor(f.walk/7)%4;}
- else{pose='idle';frame=Math.floor(clock/21)%4;}
+ else if(f.dizzy>0){pose='hurt';frame=(clock+sub)/8;animLoop=true;}
+ else if(f.stun>0){pose='hurt';frame=clamp((f.stun-sub)/5,0,3);}
+ else if(f.attack){const a=f.attack,t=a.t+sub;pose=a.type;
+  if(t<a.startup){
+   const p=clamp(t/Math.max(1,a.startup),0,1);
+   frame=p<.55?p/.55:1+(p-.55)/.45;attackPhase='STARTUP';
+  }else if(t<a.startup+a.active){frame=2;attackPhase='ACTIVE';}
+  else{const back=clamp((t-a.startup-a.active)/Math.max(1,a.recovery),0,1);
+   frame=2+Math.min(1,back/.72);attackPhase='RECOVERY';}
+ }
+ else if(f.guarding){pose='guard';frame=(clock+sub)/18;animLoop=true;}
+ else if(Math.abs(f.vx)+Math.abs(f.vy)>1.1){pose='walk';frame=(f.walk+sub)/7;animLoop=true;}
+ else{pose='idle';frame=(clock+sub)/21;animLoop=true;}
  const movement=Math.hypot(f.vx,f.vy),moving=movement>.9;
  const bob=f.down||f.ko?0:(moving?Math.sin(f.walk*.56)*3.1:Math.sin(clock*.067+(f.side==='red'?1.4:0))*1.9);
  let tilt=f.ko?(-1.32*Math.min(1,Math.max(0,koFx-7)/33)):f.stun>0?-.064:0;
@@ -328,12 +342,25 @@ function drawFighter(f){
  ctx.save();ctx.translate(f.x+tx+(burst?f.face*7:0),f.y+ty+bob);ctx.rotate((tilt)*f.face);ctx.scale(f.face*scale*stretch,scale*squash);
  if(scene==='ko'&&koFx>=3&&koFx<19){ctx.filter=koFx<9?'brightness(0)':'brightness(0) invert(1)';}
  else if(f.flash>0)ctx.filter='brightness(0) invert(1)';
- ctx.drawImage(spr,frame*FW,poses[pose]*FH,FW,FH,-150+footShift-backPull,-286,FW,FH);
+ const dx=-150+footShift-backPull,dy=-286;
+ let idleBlend=0;
+ if(f.attack&&attackPhase==='RECOVERY'){
+  const a=f.attack,back=clamp((a.t+sub-a.startup-a.active)/Math.max(1,a.recovery),0,1);
+  idleBlend=clamp((back-.72)/.28,0,1);
+ }
+ const baseAlpha=ctx.globalAlpha;
+ if(idleBlend>0)ctx.globalAlpha=baseAlpha*(1-idleBlend);
+ drawInterpolatedCell(spr,FW,FH,4,4,frame,dx,dy,poses[pose],animLoop);
+ if(idleBlend>0){
+  ctx.globalAlpha=baseAlpha*idleBlend;
+  drawInterpolatedCell(spr,FW,FH,4,4,0,dx,dy,poses.idle);
+  ctx.globalAlpha=baseAlpha;
+ }
  ctx.restore();
  if(f.attack&&f.attack.type==='hook'&&!f.down){
    const a=f.attack;
    if(attackPhase==='STARTUP'||attackPhase==='ACTIVE'){
-     ctx.save();ctx.globalAlpha=attackPhase==='ACTIVE'?.15:.08;ctx.translate(f.x-f.face*(attackPhase==='ACTIVE'?16:8),f.y+bob+4);ctx.rotate((tilt-(attackPhase==='ACTIVE'?0.08:-0.05))*f.face);ctx.scale(f.face*scale*.98,scale*.99);ctx.drawImage(spr,frame*FW,poses[pose]*FH,FW,FH,-150+footShift*.7,-286,FW,FH);ctx.restore();
+     ctx.save();ctx.globalAlpha=attackPhase==='ACTIVE'?.15:.08;ctx.translate(f.x-f.face*(attackPhase==='ACTIVE'?16:8),f.y+bob+4);ctx.rotate((tilt-(attackPhase==='ACTIVE'?0.08:-0.05))*f.face);ctx.scale(f.face*scale*.98,scale*.99);drawInterpolatedCell(spr,FW,FH,4,4,frame,-150+footShift*.7,-286,poses[pose],animLoop);ctx.restore();
    }
  }
  if(burst){const b=hitbox(f,f.attack);ctx.save();ctx.strokeStyle=f.side==='blue'?'rgba(117,212,255,.30)':'rgba(255,132,140,.30)';ctx.lineWidth=f.attack.heavy?7:4;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(b.x+(f.face>0?b.w*.2:b.w*.8),b.y+b.h*.46);ctx.lineTo(b.x+(f.face>0?b.w*.9:b.w*.1),b.y+b.h*.48);ctx.stroke();ctx.restore();}
@@ -403,7 +430,7 @@ function render(){ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jit
   // Depth sorting: active attacker in front for overlapping silhouettes.
   let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
   sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();ctx.restore();drawHUD();drawIconButton();drawButtons();drawOverlay();}
-function animate(ts){if(!frameTime)frameTime=ts;let dt=clamp(ts-frameTime,0,75);frameTime=ts;acc+=dt;let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}render();requestAnimationFrame(animate);}
+function animate(ts){if(!frameTime)frameTime=ts;let dt=clamp(ts-frameTime,0,75);frameTime=ts;acc+=dt;let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}renderFraction=clamp(acc/(1000/FPS),0,1);render();requestAnimationFrame(animate);}
 function pointerPos(e){const r=C.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
 function mapButton(x,y){let found=null,near=Infinity;buttons.forEach(b=>{let d=Math.hypot(x-b.x,y-b.y);if(d<b.r+18&&d<near){near=d;found=b;}});return found;}
 function setJoy(x,y){let dx=x-joy.x,dy=y-joy.y,m=Math.hypot(dx,dy);if(m>joy.r){dx=dx/m*joy.r;dy=dy/m*joy.r;}joyVector={x:dx/joy.r,y:dy/joy.r};}
