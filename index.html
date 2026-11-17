@@ -22,6 +22,8 @@ function updateFocusHint(){focusHint.hidden=gameHasFocus();}
 function focusGame(){try{shell.focus({preventScroll:true});}catch(_){shell.focus();}updateFocusHint();}
 
 const W=1280,H=720,FPS=60,FW=300,FH=300;
+// Shift stage elements visually; physics, HUD and touch controls remain in world coordinates.
+const RING_VERTICAL_SHIFT=70;
 const sprites={blue:new Image(),red:new Image()};
 sprites.blue.src='assets/sprites/blue_fighter.png';
 sprites.red.src='assets/sprites/red_fighter.png';
@@ -216,6 +218,8 @@ function drawArena(){
  }
  // Architectural light strip behind the ring.
  g.fillStyle='#263249';g.fillRect(0,343,W,16);g.fillStyle='#7185a0';g.fillRect(0,344,W,2);
+ // Move the ropes, posts, mat and apron downward as one painted stage.
+ g.save();g.translate(0,RING_VERTICAL_SHIFT);
  const edge=g.createLinearGradient(0,370,0,567);edge.addColorStop(0,'#182b43');edge.addColorStop(1,'#2d5378');g.fillStyle=edge;
  g.beginPath();g.moveTo(98,372);g.lineTo(1182,372);g.lineTo(1278,564);g.lineTo(0,564);g.closePath();g.fill();
  // Mat: softly lit, slightly textured painted blue-gray canvas.
@@ -239,6 +243,7 @@ function drawArena(){
  }
  const front=g.createLinearGradient(0,561,0,720);front.addColorStop(0,'#17243a');front.addColorStop(1,'#080d1a');g.fillStyle=front;g.fillRect(0,562,W,158);
  g.fillStyle='#c5a56f';g.fillRect(0,558,W,4);
+ g.restore();
  const vignette=g.createRadialGradient(640,355,195,640,330,800);vignette.addColorStop(0,'rgba(0,0,0,0)');vignette.addColorStop(1,'rgba(2,5,13,.37)');g.fillStyle=vignette;g.fillRect(0,0,W,H);
  arenaReady=true;
  }
@@ -427,9 +432,11 @@ function drawOverlay(){if(scene==='title'){ctx.fillStyle='rgba(6,9,20,.67)';ctx.
 }
 function drawImpactFrame(){if(scene!=='ko')return;if(koFx<4){ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(0,0,W,H);}else if(koFx<12){ctx.fillStyle=koFx%3===0?'rgba(255,255,255,.55)':'rgba(0,0,0,.74)';ctx.fillRect(0,0,W,H);}else if(koFx<20){ctx.fillStyle='rgba(2,6,13,.67)';ctx.fillRect(0,0,W,H);} }
 function render(){ctx.save();const jitter=shake>0?(Math.random()-.5)*shake:0,jitterY=shake>0?(Math.random()-.5)*shake*.5:0;ctx.translate(jitter+camKick,jitterY);drawArena();drawImpactFrame();
-  // Depth sorting: active attacker in front for overlapping silhouettes.
-  let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
-  sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();ctx.restore();drawHUD();drawIconButton();drawButtons();drawOverlay();}
+ // Keep fighters, ropes, debug boxes, and hit effects aligned to the lowered stage.
+ ctx.save();ctx.translate(0,RING_VERTICAL_SHIFT);
+ let sorted=[player,enemy].sort((a,b)=>(a.y+(a.attack?12:0))-(b.y+(b.attack?12:0)));
+ sorted.forEach(drawFighter);drawDebugBoxes();drawFront();drawEffects();ctx.restore();
+ ctx.restore();drawHUD();drawIconButton();drawButtons();drawOverlay();}
 function animate(ts){if(!frameTime)frameTime=ts;let dt=clamp(ts-frameTime,0,75);frameTime=ts;acc+=dt;let count=0;while(acc>=1000/FPS&&count<4){tick();acc-=1000/FPS;count++;}renderFraction=clamp(acc/(1000/FPS),0,1);render();requestAnimationFrame(animate);}
 function pointerPos(e){const r=C.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H};}
 function mapButton(x,y){let found=null,near=Infinity;buttons.forEach(b=>{let d=Math.hypot(x-b.x,y-b.y);if(d<b.r+18&&d<near){near=d;found=b;}});return found;}
