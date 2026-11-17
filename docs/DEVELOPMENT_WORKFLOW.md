@@ -3,8 +3,7 @@
 ## 개발 기준
 - `main`은 확인 가능한 최신 플레이 가능한 버전. 대규모 수정을 바로 덮어쓰지 말고 QA 후 반영.
 - `index.html`은 사용자가 실행할 최신 버전.
-- `versions/v1...v5_1/`에 기존 릴리스 전부 보존.
-- 새로운 수정은 가능한 한 `versions/vN/`에 비교용 사본 남기고 `docs/CHANGELOG.md` 갱신.
+- 별도의 버전별 폴더나 HTML 백업본은 만들지 않는다. 최신 실행판은 루트 `index.html` 하나로 관리하고 `docs/CHANGELOG.md`를 갱신한다.
 - 변경 시 먼저 새 프레임 데이터/애니메이션/로직 충돌 테스트를 확인한다.
 
 ## QA 우선순위
@@ -18,7 +17,7 @@
 GitHub > Settings > Pages > Build and deployment > Deploy from a branch > main / root 선택. 설정 이후 공개 URL은 보통 `https://zkrupinski.github.io/Z_Boxing/` 형식이다. **실제 활성화와 배포 성공 여부는 별도 확인 필요.**
 
 ## 파일 규칙
-- HTML 단일 파일 버전은 기존 구현 확인·비교용으로 보관
+- 실행 HTML은 루트 `index.html` 하나만 유지하며 변경 이력은 Git 기록에서 확인
 - 메인 실행판은 `index.html` 유지
 - 에셋을 외부 분리할 경우 HTML과 같은 기준 폴더에서 상대 경로로 로드되도록 검증
 - 정식 리소스와 테스트·임시 원화는 구분
